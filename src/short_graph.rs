@@ -11,6 +11,10 @@ pub fn is_graph_output(index: u32) -> bool {
     index > 3999
 }
 
+pub fn io_map_key(node_index: u32, io_index: u32) -> String {
+    node_index.to_string() + "_" + &io_index.to_string()
+}
+
 pub trait CheckNodeType {
     fn is_graph_input(&self) -> bool;
 
@@ -50,6 +54,16 @@ pub struct ShortGraphEdge {
     pub out_output_index: u32,
     pub in_index: u32,
     pub in_input_index: u32,
+}
+
+impl ShortGraphEdge {
+    pub fn out_key(&self) -> String {
+        io_map_key(self.out_index, self.out_output_index)
+    }
+
+    pub fn in_key(&self) -> String {
+        io_map_key(self.in_index, self.in_input_index)
+    }
 }
 
 impl CheckNodeType for ShortGraphEdge {
@@ -127,11 +141,18 @@ pub struct PFunction {
 
 #[derive(Clone)]
 #[derive(Serialize, Deserialize, Debug)]
+pub struct PClass {
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct NodeContext {
     pub _id: String,
     pub pclassid: String,
     pub pfunction: PFunction,
-
+    pub pclass: PClass,
 }
 
 impl NodeContext {
@@ -232,6 +253,12 @@ pub struct NodeIoPair {
     pub io_index: u32,
 }
 
+impl NodeIoPair {
+    pub fn map_key(&self) -> String {
+        io_map_key(self.node_index, self.io_index)
+    }
+}
+
 // key = input index (io_index)
 pub type RichGraphNodeIns = HashMap<u32, NodeIoPair>;
 
@@ -307,14 +334,14 @@ impl RichGraph {
 
 #[derive(Clone)]
 #[derive(Serialize, Deserialize, Debug)]
-pub struct RunnableGraph {
+pub struct RunnableShortGraph {
     pub steps: Vec<Vec<u32>>,
 }
 
-impl RunnableGraph {
-    pub fn new() -> RunnableGraph {
+impl RunnableShortGraph {
+    pub fn new() -> RunnableShortGraph {
         // let step: Vec<u32> = Vec::new();
-        RunnableGraph {
+        RunnableShortGraph {
             steps: Vec::new(),// vec![step],
         }
     }
@@ -324,6 +351,23 @@ impl RunnableGraph {
 
     pub fn has_output(&self) -> bool {
         is_graph_output(self.steps[self.steps.len() - 1][0])
+    }
+}
+
+#[derive(Clone)]
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RuntimeGraphs {
+    pub short_graph: ShortGraph,
+    pub interm_graph: ShortGraph,
+    pub rich_graph: RichGraph,
+    pub runnable_graph: RunnableShortGraph,
+    pub context_map: ContextMap,
+}
+
+impl RuntimeGraphs {
+    pub fn context_by_index(&self, index: u32) -> &NodeContext {
+        let node = &self.rich_graph.n.get(&index).unwrap();
+        self.context_map.map.get(&node._id).unwrap()
     }
 }
 
@@ -350,6 +394,10 @@ pub fn build_io_context(id: &String, inputs: Vec<FunctionIO>, outputs: Vec<Funct
                 outputs: outputs,
                 type_choice: String::from("fn"),
             }
-        }
+        },
+        pclass: PClass {
+            name: "base".to_owned(),
+            url: "".to_owned(),
+        },
     }
 }

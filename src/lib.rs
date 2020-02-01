@@ -12,7 +12,7 @@ use serde_json;
 use reqwest;
 
 pub mod short_graph;
-pub mod runtime_def;
+// pub mod runtime_def;
 // pub mod runtime;
 
 use crate::short_graph::CheckNodeType;
@@ -41,17 +41,19 @@ async fn load_module_async(url: &String) -> Result<WebAssembly::Instance, JsValu
 
     let a = JsFuture::from(WebAssembly::instantiate_buffer(&buffer, &Object::new())).await?;
 
-    console_log!("a {:?}", a);
+    // console_log!("a {:?}", a);
     let b: WebAssembly::Instance = Reflect::get(&a, &"instance".into())?.dyn_into()?;
 
     Ok(b)
 }
 
-fn run_func(b: &WebAssembly::Instance, fdata: &runtime_def::FunctionInterface, inputs: &serde_json::Value) -> Result<serde_json::Value, JsValue> {
-    let mut mutable_inputs = inputs.to_owned();
+fn run_func(
+    b: &WebAssembly::Instance,
+    node_context: &short_graph::NodeContext,
+    rich_graph_node: &short_graph::RichGraphNode,
+    mutable_inputs: &mut serde_json::Value,
+) -> Result<(), JsValue> {
     let c = b.exports();
-    console_log!("c: {:?}", c);
-    console_log!("callF fdata: {:?}", fdata);
 
     // let sum = Reflect::get(c.as_ref(), &"add".into())?
     //     .dyn_into::<Function>()
@@ -70,75 +72,64 @@ fn run_func(b: &WebAssembly::Instance, fdata: &runtime_def::FunctionInterface, i
     // console_log!("jsvec1 = {:?}", jsvec1);
     // console_log!("jsvec2 = {:?}", jsvec2);
 
-    let fname = &fdata.name;
+    let fname = &node_context.pfunction.name;
     let finstance = Reflect::get(c.as_ref(), &fname.into())?
         .dyn_into::<Function>()
-        .expect(&format!("{} wasn't a function", fdata.name).to_string());
+        .expect(&format!("{} wasn't a function", fname).to_string());
 
-    console_log!("finstance = {:?}", finstance);
-    let length: usize = fdata.inputs.len();
-    console_log!("Inputs lenght: {}", length);
+    // console_log!("finstance = {:?}", finstance);
+    let length: usize = node_context.inputs().len();
+    console_log!("-- Call step {:?} ; {:?} ; Inputs lenght: {}", rich_graph_node.index, fname, length);
     let result = match &length {
         0 => finstance.call0(&JsValue::undefined()),
         1 => {
-            let input = &mutable_inputs[&fdata.inputs[0].label];
-            let inputjs: i32 = serde_json::from_value(input.to_owned())
-                .expect("finstance.call1: serde_json::from_value failed");
+            let key = rich_graph_node.ins.get(&1).unwrap().map_key();
+            let input = &mutable_inputs[&key];
+            console_log!("call1 input: {:?} : {:?}", key, input);
+
+            let inputjs = JsValue::from(serde_json::to_string(&input).unwrap());
+
             finstance.call1(&JsValue::undefined(), &inputjs.into())
         },
         2 => {
-            let input1 = &mutable_inputs[&fdata.inputs[0].label];
-            let input2 = &mutable_inputs[&fdata.inputs[1].label];
-            let inputjs1: i32 = serde_json::from_value(input1.to_owned())
-                .expect("finstance.call2: serde_json::from_value 1 failed");
-            let inputjs2: i32 = serde_json::from_value(input2.to_owned())
-                .expect("finstance.call2: serde_json::from_value 2 failed");
-            console_log!("Inputs {:?}, {:?}", inputjs1, inputjs2);
+            let key1 = rich_graph_node.ins.get(&1).unwrap().map_key();
+            let key2 = rich_graph_node.ins.get(&2).unwrap().map_key();
+            let input1 = &mutable_inputs[&key1];
+            let input2 = &mutable_inputs[&key2];
+            console_log!("call2 input1: {:?} : {:?}", key1, input1);
+            console_log!("call2 input2: {:?} : {:?}", key2, input2);
+
+            let inputjs1 = JsValue::from(serde_json::to_string(&input1).unwrap());
+            let inputjs2 = JsValue::from(serde_json::to_string(&input2).unwrap());
+
             finstance.call2(&JsValue::undefined(), &inputjs1.into(), &inputjs2.into())
         },
         3 => {
-            let input1 = &mutable_inputs[&fdata.inputs[0].label];
-            let input2 = &mutable_inputs[&fdata.inputs[1].label];
-            let input3 = &mutable_inputs[&fdata.inputs[2].label];
-            let inputjs1: i32 = serde_json::from_value(input1.to_owned())
-                .expect("finstance.call3: serde_json::from_value 1 failed");
-            let inputjs2: i32 = serde_json::from_value(input2.to_owned())
-                .expect("finstance.call3: serde_json::from_value 2 failed");
-            let inputjs3: i32 = serde_json::from_value(input3.to_owned())
-                .expect("finstance.call3: serde_json::from_value 3 failed");
+            let key1 = rich_graph_node.ins.get(&1).unwrap().map_key();
+            let key2 = rich_graph_node.ins.get(&2).unwrap().map_key();
+            let key3 = rich_graph_node.ins.get(&3).unwrap().map_key();
+            let input1 = &mutable_inputs[&key1];
+            let input2 = &mutable_inputs[&key2];
+            let input3 = &mutable_inputs[&key3];
+            console_log!("call3 input1: {:?} : {:?}", key1, input1);
+            console_log!("call3 input2: {:?} : {:?}", key2, input2);
+            console_log!("call3 input3: {:?} : {:?}", key3, input3);
+
+            let inputjs1 = JsValue::from(serde_json::to_string(&input1).unwrap());
+            let inputjs2 = JsValue::from(serde_json::to_string(&input2).unwrap());
+            let inputjs3 = JsValue::from(serde_json::to_string(&input3).unwrap());
+
             finstance.call3(&JsValue::undefined(), &inputjs1.into(), &inputjs2.into(), &inputjs3.into())
         },
         _ => panic!("Function has more than 3 args"),
     }?;
 
-    console_log!("result = {:?}", result);
-    // TODO how to do this dynamically? extend dyn_into?
+    let out: serde_json::Value = result.into_serde().expect("result.into_serde failed");
+    let key = short_graph::io_map_key(rich_graph_node.index.to_owned(), 1);
 
-    let out: i32 = result.into_serde().expect("result.into_serde failed");
-    console_log!("out: {:?} = {:?}", &fdata.outputs[0].label, out);
-
-    mutable_inputs[&fdata.outputs[0].label] = out.into();
-    // mutable_inputs[&fdata.outputs[0].label] = 20.into();
-
-    // let result = finstance.call2(&JsValue::undefined(), &jsvec1, &jsvec2)?;
-    // console_log!("result = {:?}", result);
-    //
-    // let value: Vec<i32> = serde_wasm_bindgen::from_value(result)?;
-    // console_log!("value = {:?}", value);
-
-    // let result = finstance.call0(&JsValue::undefined())?;
-    // console_log!("result = {:?}", result);
-
-    // let value: String = serde_wasm_bindgen::from_value(result)?;
-    // console_log!("value = {:?}", value);
-
-    Ok(mutable_inputs)
-}
-
-fn deserialize_graph(data: String) -> serde_json::Result<runtime_def::GraphSteps> {
-    let parsed: runtime_def::GraphSteps = serde_json::from_str(&data)?;
-    // console_log!("parsed = {:?}", parsed);
-    Ok(parsed)
+    console_log!("out: {:?} = {:?}", &key, &out);
+    mutable_inputs[&key] = out;
+    Ok(())
 }
 
 fn deserialize_inputs(data: String) -> serde_json::Result<serde_json::Value> {
@@ -147,44 +138,53 @@ fn deserialize_inputs(data: String) -> serde_json::Result<serde_json::Value> {
     Ok(parsed)
 }
 
-fn run_graph(module_instances: &HashMap<String, WebAssembly::Instance>, steps: runtime_def::GraphSteps, inputs: serde_json::Value) -> Result<serde_json::Value, JsValue> {
-    let mut mutable_inputs = inputs.to_owned();
+fn run_graph(
+    module_instances: &HashMap<String, WebAssembly::Instance>,
+    runtime_graphs: &short_graph::RuntimeGraphs,
+    mut mutable_inputs: &mut serde_json::Value
+) -> Result<serde_json::Value, JsValue> {
+    // let mut mutable_inputs = inputs.to_owned();
     let mut step_start = 0;
-    let mut step_stop = steps.len() - 1;
+    let mut step_stop = runtime_graphs.runnable_graph.steps.len() - 1;
 
-    if steps[0][0].index >= 3000 {
+    if runtime_graphs.runnable_graph.has_input() {
         step_start = 1;
     }
-    if steps[step_stop][0].index >= 3000 {
+    if runtime_graphs.runnable_graph.has_output() {
         step_stop -= 1;
     }
 
-    for level in &steps[step_start..=step_stop] {
-        for step in level.iter() {
-            console_log!("Step {}", step.name);
-            let module_instance = match module_instances.get(&step.pclass.url) {
+    for level in &runtime_graphs.runnable_graph.steps[step_start..=step_stop] {
+        for node_index in level.iter() {
+            let node_context = &runtime_graphs.context_by_index(*node_index);
+            let module_instance = match module_instances.get(&node_context.pclass.url) {
                 Some(m) => m,
                 None => {
                     return Err(JsValue::from(String::from("Module does not exist")))
                 }
             };
-            mutable_inputs = run_func(
+            // mutable_inputs = run_func(
+            run_func(
                 &module_instance,
-                step,
-                &mutable_inputs,
+                &node_context,
+                &runtime_graphs.rich_graph.n.get(node_index).unwrap(),
+                &mut mutable_inputs,
             ).expect("run_func failed");
         }
     }
 
-    if step_stop == steps.len() - 1 {
-        console_log!("---- outputs: []");
+    if !runtime_graphs.runnable_graph.has_output() {
+        // console_log!("---- outputs: []");
         return Ok(serde_json::json!([]));
     }
 
     let mut outputs = vec![];
 
-    for out in steps[step_stop + 1].iter() {
-        outputs.push(mutable_inputs[&out.inputs[0].label].to_owned());
+    // console_log!("---- mutable_inputs: {:?}", mutable_inputs);
+    for out_node_index in runtime_graphs.runnable_graph.steps[step_stop + 1].iter() {
+        let key = runtime_graphs.rich_graph.n.get(&out_node_index).unwrap()
+            .ins.get(&1).unwrap().map_key();
+        outputs.push(mutable_inputs[&key].to_owned());
     }
 
     // console_log!("---- outputs: {:?}", &outputs);
@@ -193,22 +193,29 @@ fn run_graph(module_instances: &HashMap<String, WebAssembly::Instance>, steps: r
     Ok(serde_output)
 }
 
-#[wasm_bindgen]
-pub fn run(data: String, inputs: String) -> Promise {
-    let parsed_graph_steps = deserialize_graph(data).expect("Graph data could not be deserialized.");
-    let input_parsed = deserialize_inputs(inputs).expect("Graph data could not be deserialized.");
+pub fn execute_runnable(runtime_graphs: short_graph::RuntimeGraphs, input_array: serde_json::Value) -> Promise {
     let mut module_instances = HashMap::new();
 
+    let mut input_map = serde_json::json!({});
+    for (index, input_node_i) in runtime_graphs.runnable_graph.steps[0].iter().enumerate() {
+        let key: String = input_node_i.to_string() + "_1";
+        input_map[&key] = serde_json::from_str(
+            &serde_json::to_string(&input_array[index]).unwrap()
+        ).unwrap();
+    }
+
     future_to_promise(async move {
-        for level in parsed_graph_steps.iter() {
-            for step in level.iter() {
-                if step.pclass.url == String::from("") {
+        for level in runtime_graphs.runnable_graph.steps.iter().skip(1) {
+            for node_index in level.iter() {
+                let node_context = runtime_graphs.context_by_index(*node_index);
+
+                if node_context.pclass.url == String::from("") {
                     break;
                 }
-                if module_instances.contains_key(&step.pclass.url) {
+                if module_instances.contains_key(&node_context.pclass.url) {
                     break;
                 }
-                let b = load_module_async(&step.pclass.url).await;
+                let b = load_module_async(&node_context.pclass.url).await;
                 let loaded_module = match b {
                     Ok(m) => m,
                     Err(m) => {
@@ -223,18 +230,22 @@ pub fn run(data: String, inputs: String) -> Promise {
                         return Err(JsValue::from(String::from("Module loading error")));
                     }
                 };
-                console_log!("Module : {:?}", &loaded_module);
-                let c = loaded_module.exports();
-                console_log!("Module exports : {:?}", Reflect::own_keys(c.as_ref()).unwrap());
+                // console_log!("Module : {:?}", &loaded_module);
+                // let c = loaded_module.exports();
+                // console_log!("Module exports : {:?}", Reflect::own_keys(c.as_ref()).unwrap());
 
-                module_instances.insert(step.pclass.url.to_owned(), loaded_module);
+                module_instances.insert(node_context.pclass.url.to_owned(), loaded_module);
             }
         }
 
-        let outputs = run_graph(&module_instances, parsed_graph_steps, input_parsed).expect("run_graph failed");
-        console_log!("---- outputs: {:?}", &outputs);
-        console_log!("---- outputs: {:?}", &outputs.to_string());
-        let result: String = outputs.to_string();
+        let outputs = run_graph(&module_instances, &runtime_graphs, &mut input_map).expect("run_graph failed");
+
+        let graph_output = serde_json::json!({
+            "runtime_graphs": runtime_graphs,
+            "runtime_values": input_map,
+            "outputs": outputs,
+        });
+        let result: String = graph_output.to_string();
 
         Ok(JsValue::from(result))
     })
@@ -257,7 +268,7 @@ fn deserialize_context(data: String) -> serde_json::Result<short_graph::Context>
 
 pub fn add_interm_graph_io(
     short_graph: &short_graph::ShortGraph,
-    context_map: & short_graph::ContextMap,
+    context_map: &short_graph::ContextMap,
 ) -> short_graph::ShortGraph {
     let mut interm_graph = short_graph.clone();
     let mut last_input_i = 3000;
@@ -274,25 +285,23 @@ pub fn add_interm_graph_io(
     let mut ins: HashMap<String, bool> = HashMap::new();
     let mut outs: HashMap<String, bool> = HashMap::new();
     for edge in short_graph.e.iter() {
-        ins.insert(
-            edge.out_index.to_string() + "_" + &edge.out_output_index.to_string(),
-            true
-        );
-        outs.insert(
-            edge.in_index.to_string() + "_" + &edge.in_input_index.to_string(),
-            true
-        );
+        ins.insert(edge.out_key(), true);
+        outs.insert(edge.in_key(), true);
     }
 
-    for node in short_graph.n.values() {
+    let mut gr_keys: Vec<u32> = short_graph.n.keys().map(|key| *key).collect();
+    gr_keys.sort();
+    for key in gr_keys.iter() {
+        let node = short_graph.n.get(key).unwrap();
         let node_context = &context_map.map.get(&node._id)
             .expect("add_interm_graph_io could not get node_context");
+
         // Go through all outputs of a node and see if they exist in graph.n
         // If not, add the corresponding edge; missing nodes are graph outputs
         // The rest of the info (e.g. graph.n) is added from the edges in build_interm_graph
         for (out_index, _) in node_context.outputs().iter().enumerate() {
             let used_index = out_index + 1;
-            let key = node.index.to_string() + "_" + &used_index.to_string();
+            let key = short_graph::io_map_key(node.index, used_index as u32);
             if ins.contains_key(&key) {
                 continue;
             }
@@ -310,7 +319,7 @@ pub fn add_interm_graph_io(
         // The rest of the info (e.g. graph.n) is added from the edges in build_interm_graph
         for (in_index, _) in node_context.inputs().iter().enumerate() {
             let used_index = in_index + 1;
-            let key = node.index.to_string() + "_" + &used_index.to_string();
+            let key = short_graph::io_map_key(node.index, used_index as u32);
             if outs.contains_key(&key) {
                 continue;
             }
@@ -513,7 +522,7 @@ pub fn enrich_graph(
     let mut rich_graph = short_graph::RichGraph::new();
 
     // Initialize rich graph
-    for (key, value) in &interm_graph.n {
+    for key in interm_graph.n.keys() {
         let node = interm_graph.n.get(&key).expect("enrich_graph get node failed");
         rich_graph.n.insert(
             key.to_owned(),
@@ -541,8 +550,8 @@ pub fn enrich_graph(
     rich_graph
 }
 
-fn get_runnable_graph(rich_graph: &short_graph::RichGraph) -> short_graph::RunnableGraph {
-    let mut runnable = short_graph::RunnableGraph::new();
+fn get_runnable_graph(rich_graph: &short_graph::RichGraph) -> short_graph::RunnableShortGraph {
+    let mut runnable = short_graph::RunnableShortGraph::new();
     let mut keys: Vec<u32> = rich_graph.n.keys().map(|key| *key).collect();
     keys.sort();
 
@@ -560,24 +569,54 @@ fn get_runnable_graph(rich_graph: &short_graph::RichGraph) -> short_graph::Runna
     runnable
 }
 
-#[wasm_bindgen]
-pub fn runtime(graph: String, context: String) -> Result<JsValue, JsValue> {
+pub fn build_runtime(graph: String, context: String) -> short_graph::RuntimeGraphs {
     let short_graph = deserialize_short_graph(graph).expect("Graph data could not be deserialized.");
     let context_parsed = deserialize_context(context).expect("Graph data could not be deserialized.");
 
     let mut context_map = short_graph::ContextMap::from_context(context_parsed);
     // console_log!("---- context_map {:?}", context_map);
-    let interm_graph = build_interm_graph(&short_graph, &mut context_map);
-    console_log!("interm_graph: {:?}", interm_graph);
-    let rich_graph = enrich_graph(&interm_graph, &mut context_map);
 
-    console_log!("---- rich_graph = {:?}", rich_graph);
+    let interm_graph = build_interm_graph(&short_graph, &mut context_map);
+    // console_log!("interm_graph: {:?}", interm_graph);
+
+    let rich_graph = enrich_graph(&interm_graph, &mut context_map);
+    // console_log!("---- rich_graph = {:?}", rich_graph);
 
     let runnable_graph = get_runnable_graph(&rich_graph);
+    // console_log!("---- runnable_graph = {:?}", runnable_graph);
 
-    console_log!("---- runnable_graph = {:?}", runnable_graph);
+    short_graph::RuntimeGraphs {
+        short_graph: short_graph,
+        interm_graph: interm_graph,
+        rich_graph: rich_graph,
+        runnable_graph: runnable_graph,
+        context_map: context_map,
+    }
+}
 
-    let result: String = serde_json::to_string(&rich_graph).expect("Rich graph could not be serialized");
+// #[wasm_bindgen]
+// pub fn run(data: String, inputs: String) -> Promise {
+//     let parsed_graph_steps = deserialize_graph(data).expect("Graph data could not be deserialized.");
+//     let input_parsed = deserialize_inputs(inputs).expect("Graph data could not be deserialized.");
+//
+//     execute_runnable(parsed_graph_steps, input_parsed)
+// }
 
-    Ok(JsValue::from(result))
+#[wasm_bindgen]
+pub fn runtime(graph: String, context: String) -> Result<JsValue, JsValue> {
+    let result = build_runtime(graph, context);
+
+    let result_string: String = serde_json::to_string(&result).expect("Rich graph could not be serialized");
+
+    // let result: String = serde_json::to_string(&rich_graph).expect("Rich graph could not be serialized");
+
+    Ok(JsValue::from(result_string))
+}
+
+#[wasm_bindgen]
+pub fn execute(graph: String, context: String, inputs: String) -> Promise {
+    let runtime_graphs = build_runtime(graph, context);
+    let parsed_inputs = deserialize_inputs(inputs).expect("Inputs could not be deserialized");
+
+    execute_runnable(runtime_graphs, parsed_inputs)
 }
