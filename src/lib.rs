@@ -486,11 +486,6 @@ fn enrich_graph_position_nodes(
         let is_not_output: bool = !short_graph::is_graph_output(*unvisited_node_i);
         let doit: bool = (are_visited || are_defined) && (not_input_level || is_io);
 
-        // console_log!(
-        //     "unvisited_node: {:?} ; are_visited: {:?} ; are_defined: {:?} ; not_input_level: {:?} ; is_io: {:?} ; doit: {:?} ;",
-        //     unvisited_node, are_visited, are_defined, not_input_level, is_io, doit
-        // );
-
         if doit {
             enrich_visitor(context_map, &mut unvisited_node, &mut current_point, level, row);
 
@@ -594,21 +589,11 @@ pub fn build_runtime(graph: String, context: String) -> short_graph::RuntimeGrap
     }
 }
 
-// #[wasm_bindgen]
-// pub fn run(data: String, inputs: String) -> Promise {
-//     let parsed_graph_steps = deserialize_graph(data).expect("Graph data could not be deserialized.");
-//     let input_parsed = deserialize_inputs(inputs).expect("Graph data could not be deserialized.");
-//
-//     execute_runnable(parsed_graph_steps, input_parsed)
-// }
-
 #[wasm_bindgen]
 pub fn runtime(graph: String, context: String) -> Result<JsValue, JsValue> {
     let result = build_runtime(graph, context);
 
     let result_string: String = serde_json::to_string(&result).expect("Rich graph could not be serialized");
-
-    // let result: String = serde_json::to_string(&rich_graph).expect("Rich graph could not be serialized");
 
     Ok(JsValue::from(result_string))
 }
