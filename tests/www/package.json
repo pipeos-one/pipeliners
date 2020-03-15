@@ -1,0 +1,32 @@
+{
+  "name": "test-pipeliners",
+  "version": "0.1.0",
+  "description": "create an app to consume rust-generated wasm packages from pipeliners",
+  "main": "index.js",
+  "bin": {
+    "create-wasm-app": ".bin/create-wasm-app.js"
+  },
+  "scripts": {
+    "build": "webpack --config webpack.config.js",
+    "start": "webpack-dev-server"
+  },
+  "keywords": [
+    "webassembly",
+    "wasm",
+    "rust",
+    "webpack"
+  ],
+  "dependencies": {
+    "save-file": "^2.3.1",
+    "text-table": "^0.2.0",
+    "idb-keyval": "^3.2.0",
+    "pipewasm": "file:../../pipers/pkg"
+  },
+  "devDependencies": {
+    "hello-wasm-pack": "^0.1.0",
+    "webpack": "^4.29.3",
+    "webpack-cli": "^3.1.0",
+    "webpack-dev-server": "^3.1.5",
+    "copy-webpack-plugin": "^5.0.0"
+  }
+}
